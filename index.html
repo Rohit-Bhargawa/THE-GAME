@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2D Car Racing Game - Sedan</title>
+  <style>
+    /* Reset and base styles */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      background: linear-gradient(to bottom, #87ceeb, #4caf50);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+      color: #fff;
+      user-select: none;
+    }
+
+    h1 {
+      margin-bottom: 15px;
+      text-shadow: 2px 2px 4px #0008;
+    }
+
+    canvas {
+      background: #7ec850; /* grass green */
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 15px;
+      transition: box-shadow 0.3s ease;
+    }
+    canvas:active {
+      box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+    }
+
+    #scoreboard, #highScoreboard, #levelboard {
+      font-size: 1.6rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      text-shadow: 1px 1px 2px #0008;
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 15px;
+    }
+
+    #controls {
+      display: flex;
+      gap: 15px;
+      width: 100%;
+      max-width: 420px;
+      justify-content: center;
+      margin-top: 10px;
+    }
+    .btn {
+      flex: 1;
+      padding: 18px 0;
+      font-size: 20px;
+      font-weight: 600;
+      background: linear-gradient(145deg, #2a7a2a, #145214);
+      border: none;
+      border-radius: 10px;
+      color: #e0e0e0;
+      box-shadow: 4px 4px 8px #145214, -4px -4px 8px #2a7a2a;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+      touch-action: manipulation;
+    }
+    .btn:hover {
+      background: linear-gradient(145deg, #3f9f3f, #1d741d);
+      color: #fff;
+      box-shadow: 6px 6px 10px #1d741d, -6px -6px 10px #3f9f3f;
+    }
+    .btn:active {
+      background: linear-gradient(145deg, #1d741d, #3f9f3f);
+      box-shadow: inset 4px 4px 8px #145214, inset -4px -4px 8px #2a7a2a;
+      transform: scale(0.95);
+    }
+
+    #restartBtn {
+      margin-top: 20px;
+      padding: 12px 30px;
+      font-size: 18px;
+      background: #d32f2f;
+      border-radius: 12px;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 5px 10px #8b0000;
+      display: none;
+      user-select: none;
+      transition: background-color 0.3s ease;
+    }
+    #restartBtn:hover {
+      background: #b71c1c;
+    }
+
+    @media (max-width: 500px) {
+      #controls {
+        flex-direction: column;
+      }
+      .btn {
+        width: 100%;
+      }
+      #scoreboard, #highScoreboard, #levelboard {
+        font-size: 1.3rem;
+        padding: 0 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>2D Car Racing Game - Sedan</h1>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <div id="scoreboard">Score: <span id="score">0</span></div>
+  <div id="highScoreboard">High Score: <span id="highScore">0</span></div>
+  <div id="levelboard">Level: <span id="level">1</span></div>
+  <div id="controls">
+    <button class="btn" id="leftBtn">Left</button>
+    <button class="btn" id="jumpBtn">Jump</button>
+    <button class="btn" id="rightBtn">Right</button>
+  </div>
+  <button id="restartBtn">Restart Game</button>
+
+  <audio id="jumpSound" src="https://actions.google.com/sounds/v1/cartoon/cartoon_boing.ogg" preload="auto"></audio>
+  <audio id="crashSound" src="https://actions.google.com/sounds/v1/cartoon/cartoon_cowbell.ogg" preload="auto"></audio>
+  <audio id="scoreSound" src="https://actions.google.com/sounds/v1/cartoon/pop.ogg" preload="auto"></audio>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const groundY = canvas.height - 50;
+
+    // Sounds
+    const jumpSound = document.getElementById('jumpSound');
+    const crashSound = document.getElementById('crashSound');
+    const scoreSound = document.getElementById('scoreSound');
+
+    // Game variables
+    let score = 0;
+    let highScore = localStorage.getItem('bikeHighScore') || 0;
+    let level = 1;
+    let gameOver = false;
+
+    // Car properties (replacing bike)
+    const bike = {
+      x: 100,
+      y: groundY - 40,
+      width: 80,
+      height: 35,
+      vx: 0,
+      vy: 0,
+      speed: 4,
+      gravity: 0.7,
+      jumpForce: -15,
+      onGround: true,
+    };
+
+    // Obstacles
+    let obstacles = [];
+
+    // Speed modifier for obstacles (increases with level)
+    let obstacleSpeed = 5;
+
+    function createObstacles() {
+      obstacles = [];
+      let posX = canvas.width + 200;
+      for (let i = 0; i < 5; i++) {
+        obstacles.push({
+          x: posX,
+          y: groundY - 30,
+          width: 25,
+          height: 30,
+          passed: false,
+        });
+        posX += 350 + Math.random() * 200;
+      }
+    }
+
+    createObstacles();
+
+    // Controls state
+    const keys = {
+      left: false,
+      right: false,
+      jump: false,
+    };
+
+    // Draw sleek sedan car
+    function drawSedan() {
+      ctx.fillStyle = '#1e3a5f'; // dark blue
+      ctx.shadowColor = '#12304a';
+      ctx.shadowBlur = 10;
+
+      // Car body base (lower and sleek)
+      ctx.beginPath();
+      ctx.moveTo(bike.x + 10, bike.y + bike.height);          // left back wheel start
+      ctx.lineTo(bike.x + 10, bike.y + 15);                    // bottom left body front
+      ctx.quadraticCurveTo(bike.x + 20, bike.y + 5, bike.x + 35, bike.y + 5); // front hood curve
+      ctx.lineTo(bike.x + 55, bike.y + 5);                     // front roof start
+      ctx.quadraticCurveTo(bike.x + 70, bike.y + 10, bike.x + 75, bike.y + 20); // roof to rear curve
+      ctx.lineTo(bike.x + 75, bike.y + bike.height);           // rear bottom
+      ctx.closePath();
+      ctx.fill();
+
+      // Windows
+      ctx.fillStyle = '#7fa8c9';
+      ctx.beginPath();
+      ctx.moveTo(bike.x + 25, bike.y + 10);
+      ctx.lineTo(bike.x + 50, bike.y + 10);
+      ctx.lineTo(bike.x + 65, bike.y + 20);
+      ctx.lineTo(bike.x + 30, bike.y + 20);
+      ctx.closePath();
+      ctx.fill();
+
+      // Wheels
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(bike.x + 25, bike.y + bike.height + 5, 14, 0, Math.PI * 2); // left wheel
+      ctx.arc(bike.x + 60, bike.y + bike.height + 5, 14, 0, Math.PI * 2); // right wheel
+      ctx.fill();
+
+      // Wheel rims
+      ctx.fillStyle = '#999';
+      ctx.beginPath();
+      ctx.arc(bike.x + 25, bike.y + bike.height + 5, 7, 0, Math.PI * 2);
+      ctx.arc(bike.x + 60, bike.y + bike.height + 5, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawGround() {
+      const grd = ctx.createLinearGradient(0, groundY, 0, canvas.height);
+      grd.addColorStop(0, '#4caf50');
+      grd.addColorStop(1, '#2e7d32');
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, groundY, canvas.width, 50);
+    }
+
+    function drawObstacles() {
+      ctx.fillStyle = '#444';
+      ctx.shadowColor = '#222';
+      ctx.shadowBlur = 5;
+      obstacles.forEach(obs => {
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+      });
+      ctx.shadowBlur = 0;
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      // Horizontal movement
+      if (keys.left) bike.vx = -bike.speed;
+      else if (keys.right) bike.vx = bike.speed;
+      else bike.vx = 0;
+
+      bike.x += bike.vx;
+
+      // Clamp bike within canvas horizontally
+      bike.x = Math.max(0, Math.min(bike.x, canvas.width - bike.width));
+
+      // Jump
+      if (keys.jump && bike.onGround) {
+        bike.vy = bike.jumpForce;
+        bike.onGround = false;
+        keys.jump = false; // single jump per press
+        jumpSound.currentTime = 0;
+        jumpSound.play();
+      }
+
+      // Gravity
+      bike.vy += bike.gravity;
+      bike.y += bike.vy;
+
+      // Floor collision
+      if (bike.y + bike.height >= groundY) {
+        bike.y = groundY - bike.height;
+        bike.vy = 0;
+        bike.onGround = true;
+      }
+
+      // Move obstacles left
+      obstacles.forEach(obs => {
+        obs.x -= obstacleSpeed;
+
+        // Detect if bike passed obstacle for scoring
+        if (!obs.passed && obs.x + obs.width < bike.x) {
+          obs.passed = true;
+          score++;
+          document.getElementById('score').textContent = score;
+          scoreSound.currentTime = 0;
+          scoreSound.play();
+
+          // Level up every 10 points
+          if (score % 10 === 0) {
+            level++;
+            document.getElementById('level').textContent = level;
+            obstacleSpeed += 1; // Increase speed each level
+          }
+        }
+
+        if (obs.x + obs.width < 0) {
+          obs.x = canvas.width + Math.random() * 300 + 200;
+          obs.passed = false;
+        }
+
+        // Collision detection
+        if (
+          bike.x < obs.x + obs.width &&
+          bike.x + bike.width > obs.x &&
+          bike.y < obs.y + obs.height &&
+          bike.y + bike.height > obs.y
+        ) {
+          gameOver = true;
+          document.getElementById('restartBtn').style.display = 'block';
+          crashSound.currentTime = 0;
+          crashSound.play();
+
+          // Update high score
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('bikeHighScore', highScore);
+            document.getElementById('highScore').textContent = highScore;
+          }
+        }
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawGround();
+      drawSedan();
+      drawObstacles();
+
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 20);
+
+        ctx.font = '24px Arial';
+        ctx.fillText('Tap Restart to Play Again', canvas.width / 2, canvas.height / 2 + 30);
+      }
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = true;
+      if (e.key === 'ArrowRight') keys.right = true;
+      if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = false;
+      if (e.key === 'ArrowRight') keys.right = false;
+      if (e.key === 'ArrowUp' || e.key === ' ') keys.jump = false;
+    });
+
+    // Touch controls
+    document.getElementById('leftBtn').addEventListener('touchstart', e => { e.preventDefault(); keys.left = true; });
+    document.getElementById('leftBtn').addEventListener('touchend', e => { e.preventDefault(); keys.left = false; });
+
+    document.getElementById('rightBtn').addEventListener('touchstart', e => { e.preventDefault(); keys.right = true; });
+    document.getElementById('rightBtn').addEventListener('touchend', e => { e.preventDefault(); keys.right = false; });
+
+    document.getElementById('jumpBtn').addEventListener('touchstart', e => { e.preventDefault(); keys.jump = true; });
+    document.getElementById('jumpBtn').addEventListener('touchend', e => { e.preventDefault(); keys.jump = false; });
+
+    // Restart button logic
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      score = 0;
+      level = 1;
+      obstacleSpeed = 5;
+      gameOver = false;
+      bike.x = 100;
+      bike.y = groundY - bike.height;
+      bike.vx = 0;
+      bike.vy = 0;
+      bike.onGround = true;
+      createObstacles();
+      document.getElementById('score').textContent = score;
+      document.getElementById('level').textContent = level;
+      document.getElementById('restartBtn').style.display = 'none';
+      gameLoop();
+    });
+
+    // Init high score display
+    document.getElementById('highScore').textContent = highScore;
+
+    // Start game loop
+    gameLoop();
+  </script>
+</body>
+</html>
